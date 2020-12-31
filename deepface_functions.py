@@ -36,87 +36,111 @@ def make_dict(dataset_path):
 
     return dic
 
-def save_hash(img_dict, model_name='Ensemble', model=None, enforce_detection=True, detector_backend = 'mtcnn'):
+def save_hash(img_dict, model_name='Ensemble', enforce_detection=True, detector_backend = 'mtcnn'):
 
     img_list = list(img_dict.keys())
+
+    model = {}
 
     if model_name == 'Ensemble':
 
         print("Ensemble learning enabled")
         model_names = ["VGG-Face", "Facenet", "OpenFace", "DeepFace"]
 
-        if model == None:
-
-            model = {}
-            model_pbar = tqdm(range(4), desc='Loading face recognition models', disable = False)
+        model_pbar = tqdm(range(4), desc='Loading face recognition models', disable = False)
+        
+        for index in model_pbar:
             
-            for index in model_pbar:
-                
-                if index == 0:
-                    model_pbar.set_description("Loading VGG-Face")
-                    model["VGG-Face"] = VGGFace.loadModel()
-                elif index == 1:
-                    model_pbar.set_description("Loading Google FaceNet")
-                    model["Facenet"] = Facenet.loadModel()
-                elif index == 2:
-                    model_pbar.set_description("Loading OpenFace")
-                    model["OpenFace"] = OpenFace.loadModel()
-                elif index == 3:
-                    model_pbar.set_description("Loading Facebook DeepFace")
-                    model["DeepFace"] = FbDeepFace.loadModel()
+            if index == 0:
+                model_pbar.set_description("Loading VGG-Face...")
+                model["VGG-Face"] = VGGFace.loadModel()
+            elif index == 1:
+                model_pbar.set_description("Loading Google FaceNet...")
+                model["Facenet"] = Facenet.loadModel()
+            elif index == 2:
+                model_pbar.set_description("Loading OpenFace...")
+                model["OpenFace"] = OpenFace.loadModel()
+            elif index == 3:
+                model_pbar.set_description("Loading Facebook DeepFace...")
+                model["DeepFace"] = FbDeepFace.loadModel()
 
-        disable_option = False if len(img_list) > 1 else True
-        pbar = tqdm(range(len(img_list)), desc='Avaliando Hash', disable = disable_option)
+    else:
+  
+        model_names = []; model_names.append(model_name)
+        
+        if model_name == 'VGG-Face':
+            print(model_name + " enabled")
+            print("Loading VGG-Face...")
+            model["VGG-Face"] = VGGFace.loadModel()
+        elif model_name == 'FaceNet':
+            print(model_name + " enabled")
+            print("Loading Google FaceNet...")
+            model["Facenet"] = Facenet.loadModel()
+        elif model_name == 'OpenFace':
+            print(model_name + " enabled")
+            print("Loading OpenFace...")
+            model["OpenFace"] = OpenFace.loadModel()
+        elif model_name == 'DeepFace':
+            print(model_name + " enabled")
+            print("Loading Facebook DeepFace...")
+            model["DeepFace"] = FbDeepFace.loadModel()
+        else:
+            raise NameError ('Invalid model_name: ' + model_name)
 
-        df = pd.DataFrame(columns = model_names, index = list(img_dict.keys()))
-        df = df.astype(object)
+    disable_option = False if len(img_list) > 1 else True
+    pbar = tqdm(range(len(img_list)), desc='Avaliando Hash', disable = disable_option)
+
+    df = pd.DataFrame(columns = model_names, index = list(img_dict.keys()))
+    df = df.astype(object)
+    representation = []
+    erro_keys = []
+
+    for index in pbar:
+
+        erro = False
+        img1_key = img_list[index]
         representation = []
-        erro_keys = []
+        
+        for i in  model_names:
+            custom_model = model[i]
 
-        for index in pbar:
-
-            erro = False
-            img1_key = img_list[index]
-            representation = []
+            input_shape = functions.find_input_shape(custom_model)	
+            input_shape_x = input_shape[0]; input_shape_y = input_shape[1]
             
-            for i in  model_names:
-                custom_model = model[i]
+            try:
+                img1 = functions.preprocess_face(img=img_dict[img1_key]
+                , target_size=(input_shape_y, input_shape_x)
+                , enforce_detection=enforce_detection
+                , detector_backend=detector_backend)
+            except:
+                print('Erro na representação!')
+                erro = True
+                erro_keys.append(img1_key)
+                break
 
-                input_shape = functions.find_input_shape(custom_model)	
-                input_shape_x = input_shape[0]; input_shape_y = input_shape[1]
-                
-                try:
-                    img1 = functions.preprocess_face(img=img_dict[img1_key]
-                    , target_size=(input_shape_y, input_shape_x)
-                    , enforce_detection=enforce_detection
-                    , detector_backend=detector_backend)
-                except:
-                    print('Erro na representação!')
-                    erro = True
-                    erro_keys.append(img1_key)
-                    break
+            img1_representation = custom_model.predict(img1)[0,:]
+            representation.append(img1_representation)
 
-                img1_representation = custom_model.predict(img1)[0,:]
-                representation.append(img1_representation)
+        if erro:
+            continue
+        
+        df.loc[img_list[index]] = representation	
 
-            if erro:
-                continue
-            
-            df.loc[img_list[index]] = representation	
+    for i in erro_keys:
+        df.drop(index = i, inplace = True)				
 
-        for i in erro_keys:
-            df.drop(index = i, inplace = True)				
+    return df
 
-        return df
+def metrics_dataframe(img_df, chosen_metric='Ensemble', one_compair=False):
 
-    print('Por enquanto, aceitamos apenas Ensemble e nossos modelos predefinidos.')
-    return None
+    if chosen_metric=='Ensemble':
+        metrics = ['Cosine', 'Euclidean', 'L2']
+    elif chosen_metric=='Cosine' or chosen_metric=='Euclidean' or chosen_metric=='L2':
+        metrics=[]; metrics.append(chosen_metric)
+    else:
+        raise NameError ('Invalid chosen_metric: ' + chosen_metric)
 
-def metrics_dataframe(img_df, one_compair=False):
-
-    metrics = ['Cosine', 'Euclidean', 'L2']
     model = list(img_df.columns)
-
     column_names = []
     index_names = []
     for i in model:
@@ -141,16 +165,15 @@ def metrics_dataframe(img_df, one_compair=False):
             distances = []
             for model in img_df.columns:
 
-                #Cosine:
-                cosine_distance = dst.findCosineDistance(img_df.at[image_index, model], img_df.at[real_index, model])
-                #Euclidean:
-                euclidean_distance = dst.findEuclideanDistance(img_df.at[image_index, model], img_df.at[real_index, model])
-                #L2:
-                l2_distance = dst.findEuclideanDistance(dst.l2_normalize(img_df.at[image_index, model]), dst.l2_normalize(img_df.at[real_index, model]))
-
-                distances.append(cosine_distance)
-                distances.append(euclidean_distance)
-                distances.append(l2_distance)
+                if 'Cosine' in metrics:
+                    cosine_distance = dst.findCosineDistance(img_df.at[real_index, model], img_df.at[image_index, model])
+                    distances.append(cosine_distance)
+                if 'Euclidean' in metrics:
+                    euclidean_distance = dst.findEuclideanDistance(img_df.at[real_index, model], img_df.at[image_index, model])
+                    distances.append(euclidean_distance)
+                if 'L2' in metrics:
+                    l2_distance = dst.findEuclideanDistance(dst.l2_normalize(img_df.at[real_index, model]), dst.l2_normalize(img_df.at[image_index, model]))
+                    distances.append(l2_distance)
 
             string = image_index + '-' + real_index
             metrics_df.loc[string] = distances
@@ -170,16 +193,15 @@ def metrics_dataframe(img_df, one_compair=False):
                 distances = []	
                 for model in img_df.columns:
 				
-                    #Cosine:
-                    cosine_distance = dst.findCosineDistance(img_df.at[real_index, model], img_df.at[real_jndex, model])
-                    #Euclidean:
-                    euclidean_distance = dst.findEuclideanDistance(img_df.at[real_index, model], img_df.at[real_jndex, model])
-                    #L2:
-                    l2_distance = dst.findEuclideanDistance(dst.l2_normalize(img_df.at[real_index, model]), dst.l2_normalize(img_df.at[real_jndex, model]))
-
-                    distances.append(cosine_distance)
-                    distances.append(euclidean_distance)
-                    distances.append(l2_distance)
+                    if 'Cosine' in metrics:
+                        cosine_distance = dst.findCosineDistance(img_df.at[real_index, model], img_df.at[real_jndex, model])
+                        distances.append(cosine_distance)
+                    if 'Euclidean' in metrics:
+                        euclidean_distance = dst.findEuclideanDistance(img_df.at[real_index, model], img_df.at[real_jndex, model])
+                        distances.append(euclidean_distance)
+                    if 'L2' in metrics:
+                        l2_distance = dst.findEuclideanDistance(dst.l2_normalize(img_df.at[real_index, model]), dst.l2_normalize(img_df.at[real_jndex, model]))
+                        distances.append(l2_distance)
 
                 string = real_index + '-' + real_jndex
                 metrics_df.loc[string] = distances
