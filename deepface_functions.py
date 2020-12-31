@@ -131,16 +131,20 @@ def save_hash(img_dict, model_name='Ensemble', enforce_detection=True, detector_
 
     return df
 
-def metrics_dataframe(img_df, chosen_metric='Ensemble', one_compair=False):
+def metrics_dataframe(img_df, chosen_metric='Cosine', one_compair=False):
 
-    if chosen_metric=='Ensemble':
-        metrics = ['Cosine', 'Euclidean', 'L2']
-    elif chosen_metric=='Cosine' or chosen_metric=='Euclidean' or chosen_metric=='L2':
-        metrics=[]; metrics.append(chosen_metric)
-    else:
-        raise NameError ('Invalid chosen_metric: ' + chosen_metric)
+    '''
+    accepted chosen_metric possibilities: 'Cosine', 'Euclidean', 'L2'
 
+    '''
+    
     model = list(img_df.columns)
+    
+    if len(model) > 1: # Ensemble
+        metrics = ['Cosine', 'Euclidean', 'L2']
+    else: # Only one model considered (eg.: VGG-Face with Cosine, Facenet with Euclidean...)
+        metrics=[]; metrics.append(chosen_metric)
+
     column_names = []
     index_names = []
     for i in model:
@@ -189,7 +193,6 @@ def metrics_dataframe(img_df, chosen_metric='Ensemble', one_compair=False):
 
                 real_jndex = img_df.index[j]
 
-
                 distances = []	
                 for model in img_df.columns:
 				
@@ -210,33 +213,60 @@ def metrics_dataframe(img_df, chosen_metric='Ensemble', one_compair=False):
 
     return metrics_df
 
-def ensemble_dataframe(metrics_df):
+def verification_dataframe(metrics_df):
 
-    columns_names = ['Verified', 'Ground Truth', 'Score']
-    metrics_df = metrics_df.drop('Euclidean with OpenFace', axis = 1)
+    columns_names = ['Verified', 'Ground Truth']
     verification_df = pd.DataFrame(columns = columns_names, index = metrics_df.index)
 
-    deepface_ensemble = Boosting.build_gbm()
+    if len(list(metrics_df.columns)) > 1: #Ensemble
 
-    comp_pbar = tqdm(range(len(metrics_df.index)), desc = 'Realizando o ensemble para cada par de indivíduos.')
-    for i in comp_pbar:
+        metrics_df = metrics_df.drop('Euclidean with OpenFace', axis = 1)
+        deepface_ensemble = Boosting.build_gbm()
 
-        index = metrics_df.index[i]
-        prediction = deepface_ensemble.predict(np.expand_dims(np.array(metrics_df.loc[index]), axis=0))[0]
+        comp_pbar = tqdm(range(len(metrics_df.index)), desc = 'Realizando a verificação para cada par de indivíduos...')
+        for i in comp_pbar:
 
-        verified = np.argmax(prediction) == 1
-        if verified: identified = "true"
-        else: identified = "false"
+            index = metrics_df.index[i]
+            prediction = deepface_ensemble.predict(np.expand_dims(np.array(metrics_df.loc[index]), axis=0))[0]
 
-        score = prediction[np.argmax(prediction)]
+            verified = np.argmax(prediction) == 1
+            if verified: identified = "true"
+            else: identified = "false"
 
-        names = index.split('-')
-        if (names[0])[:-1] == (names[1])[:-1]:
-            ground_truth = "true"
-        else: ground_truth = "false"
+            names = index.split('-')
+            if (names[0])[:-1] == (names[1])[:-1]:
+                ground_truth = "true"
+            else: ground_truth = "false"
 
-        ensembles = [identified, ground_truth, score]
-        verification_df.loc[index] = ensembles
+            ensembles = [identified, ground_truth]
+            verification_df.loc[index] = ensembles
+
+    else:
+
+        words = (list(metrics_df.columns)[0]).split(' with ')
+        metric = words[0]
+        model_name = words[1]
+
+        #threshold = dst.findThreshold(model_name, metric)
+        threshold = 0.2
+
+        comp_pbar = tqdm(range(len(metrics_df.index)), desc = 'Realizando a verificação para cada par de indivíduos...')
+        for i in comp_pbar:
+
+            index = metrics_df.index[i]
+            value  = np.array(metrics_df.loc[index])[0]
+    
+            verified = value < threshold
+            if verified: identified = "true"
+            else: identified = "false"
+
+            names = index.split('-')
+            if (names[0])[:-1] == (names[1])[:-1]:
+                ground_truth = "true"
+            else: ground_truth = "false"
+
+            ensembles = [identified, ground_truth]
+            verification_df.loc[index] = ensembles
 
     return verification_df
 
