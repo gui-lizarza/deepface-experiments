@@ -53,7 +53,7 @@ def representation_dataframe(img_dict, model_name='Ensemble', enforce_detection=
 '''
 returns a pandas dataframe containing the faces' representations (as arrays) according to different neural network models.
 
-Possible possibilities for 'model_name':
+Possible instances for 'model_name':
 'VGG-Face', 
 'FaceNet', 
 'OpenFace', 
@@ -160,7 +160,7 @@ def metrics_dataframe(img_df, chosen_metric='Cosine', one_compair=False):
 '''
 returns a pandas dataframe containing the distances (measured by different metrics) between the faces' representations.
 
-Possible possibilities for 'chosen_metric': 
+Possible instances for 'chosen_metric': 
 'Cosine', 
 'Euclidean' or 
 'L2'.
@@ -246,7 +246,7 @@ Possible possibilities for 'chosen_metric':
 def verification_dataframe(metrics_df, threshold):
 
 '''
-returns a pandas dataframe containing the final predictions of the model (if two faces belong to the same person -- 'Verified' column) and the ground truth ('Ground Truth' column).
+returns a pandas dataframe containing the final predictions of the model (the faces compared belong to the same person? -- 'Verified' column) and the ground truth ('Ground Truth' column).
 '''
 
     columns_names = ['Verified', 'Ground Truth']
